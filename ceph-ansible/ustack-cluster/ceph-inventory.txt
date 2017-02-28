@@ -1,0 +1,66 @@
+[mons]
+server-01
+server-09
+server-17
+
+[osds]
+server01 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm01"
+server02 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm01"
+server03 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm01"
+server04 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm01"
+
+server05 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm02"
+server06 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm02"
+server07 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm02"
+server08 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm02"
+
+server09 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm03"
+server10 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm03"
+server11 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm03"
+server12 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm03"
+
+server13 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm04"
+server14 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm04"
+server15 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm04"
+server16 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm04"
+
+server17 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm05"
+server18 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm05"
+server19 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm05"
+server20 osd_crush_location="root=stable-root pod=replica-domain01 rack=osdm05"
+
+server21 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm06"
+server22 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm06"
+server23 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm06"
+server24 osd_crush_location="root=stable-root pod=replica-domain02 rack=osdm06"
+
+[clients]
+server01
+server02
+server03
+server04
+
+server05
+server06
+server07
+server08
+
+server09
+server10
+server11
+server12
+
+server13
+server14
+server15
+server16
+
+server17
+server18
+server19
+server20
+
+server21
+server22
+server23
+server24

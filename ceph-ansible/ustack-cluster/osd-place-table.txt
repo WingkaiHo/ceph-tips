@@ -1,0 +1,215 @@
+[osd.0]
+host =  server-01
+
+[osd.1]
+host =  server-01
+
+[osd.2]
+host =  server-01
+
+[osd.3]
+host =  server-02
+
+[osd.4]
+host =  server-02
+
+[osd.5]
+host = server-02
+
+[osd.6]
+host =  server-03
+
+[osd.7]
+host =  server-03
+
+[osd.8]
+host =  server-03
+
+[osd.9]
+host =  server-04
+
+[osd.10]
+host =  server-04
+
+[osd.11]
+host =  server-04
+
+[osd.12]
+host =  server-05
+
+[osd.13]
+host =  server-05
+
+[osd.14]
+host =  server-05
+
+[osd.15]
+host =  server-06
+
+[osd.16]
+host =  server-06
+
+[osd.17]
+host =  server-06
+
+[osd.18]
+host =  server-07
+
+[osd.19]
+host =  server-07
+
+[osd.20]
+host =  server-07
+
+[osd.21]
+host =  server-08
+
+[osd.22]
+host =  server-08
+
+[osd.23]
+host =  server-08
+
+[osd.24]
+host =  server-09
+
+[osd.25]
+host =  server-09
+
+[osd.26]
+host =  server-09
+
+[osd.27]
+host =  server-10
+
+[osd.28]
+host =  server-10
+
+[osd.29]
+host =  server-10
+
+[osd.30]
+host =  server-11
+
+[osd.31]
+host =  server-11
+
+[osd.32]
+host =  server-11
+
+[osd.33]
+host =  server-12
+
+[osd.34]
+host =  server-12
+
+[osd.35]
+host =  server-12
+
+[osd.36]
+host =  server-13
+
+[osd.37]
+host =  server-13
+
+[osd.38]
+host =  server-13
+
+[osd.39]
+host =  server-14
+
+[osd.40]
+host =  server-14
+
+[osd.41]
+host =  server-14
+
+[osd.42]
+host =  server-15
+
+[osd.43]
+host =  server-15
+
+[osd.44]
+host =  server-15
+
+[osd.45]
+host =  server-16
+
+[osd.46]
+host =  server-16
+
+[osd.47]
+host =  server-16
+
+[osd.48]
+host =  server-17
+
+[osd.49]
+host =  server-17
+
+[osd.50]
+host =  server-17
+
+[osd.51]
+host =  server-18
+
+[osd.52]
+host =  server-18
+
+[osd.53]
+host =  server-18
+
+[osd.54]
+host =  server-19
+
+[osd.55]
+host =  server-19
+
+[osd.56]
+host =  server-19
+
+[osd.57]
+host =  server-20
+
+[osd.58]
+host =  server-20
+
+[osd.59]
+host =  server-20
+
+[osd.60]
+host =  server-21
+
+[osd.61]
+host =  server-21
+
+[osd.62]
+host =  server-21
+
+[osd.63]
+host =  server-22
+
+[osd.64]
+host =  server-22
+
+[osd.65]
+host =  server-22
+
+[osd.66]
+host =  server-23
+
+[osd.67]
+host =  server-23
+
+[osd.68]
+host =  server-23
+
+[osd.69]
+host =  server-24
+
+[osd.70]
+host =  server-24
+
+[osd.72]
+host = server-24

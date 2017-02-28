@@ -1,0 +1,7 @@
+- name: Add /etc/hosts
+  template:
+    src: "{{ role_path }}/templates/hosts.j2"
+    dest: /etc/hosts
+    owner: root
+    group: root
+    mode: 0644
