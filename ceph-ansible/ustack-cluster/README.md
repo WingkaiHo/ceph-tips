@@ -142,9 +142,9 @@ rule rule-stable-root {
 }
 ```
 
-  集群包含了两个`replica domain`,  一个Copyset只能位于一个`replica domain`.  而`replica dommain`类型是pod  所以`step choose firstn 1 type pod`, 代表只取1个pod类型的bucket
-  在这个`replica domain`内, 包含3个`osd domain`, 一个`osd domain` 有12个磁盘. 目标是每个备份都需要位于不同的`osd domain`. `firstn 0`, 我们取存储池备份数目个rack blucky, 例如备份数3, 在同一个replica domain 取3个rack blucky. 最终取这个`osd domain`下一层的osd bucket, 所以前面`step chooseleaf`
-  添加完毕后, 需要重新编译
+  - 集群包含了两个`replica domain`,  一个Copyset只能位于一个`replica domain`.  而`replica dommain`类型是pod  所以`step choose firstn 1 type pod`, 表示Copyset 只取1个pod类型的bucket
+  - `replica domain`内, 包含3个`osd domain`, Copyset内是每个备份都需要位于不同的`osd domain`. `firstn 0`表示取Copyset备份数目个rack blucky, 例如备份数3, 在同一个replica domain, 取3个不同的rack blucky.  因为最终是要取这个`osd domain`下一层的osd bucket, 所以前面`step chooseleaf`
+  - 添加完毕后, 需要重新编译
 
 ```
 // 编译添加rule后crush
