@@ -1,0 +1,19 @@
+#devices:
+# - device_name: sde
+#   partitions:
+#   - index: 1
+#     size: 10G
+#     type: journal
+#   - index: 2
+#     size: 10G
+#     type: journal
+# - device_name: sdf
+#   partitions:
+#   - index: 1
+#     size: 10G
+#     type: data
+#   - index: 2
+#     size: 10G
+#     type: journal
+
+devices: []
