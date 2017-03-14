@@ -1,0 +1,116 @@
+
+# - device_name: sdc
+#   partitions:
+#   - index: 1
+#     size: 10G
+#     osd_id: 3
+#   - index: 2
+#     size: 10G
+#     osd_id: 4
+#
+
+- vars:
+    osd_group_name: osds
+    journal_typecode: 45b0969e-9b03-4f30-b4c6-b4b80ceff106
+  hosts:
+      - "{{ osd_group_name }}"
+
+  tasks:
+
+  - name: load a variable file for osds_journal_migration
+    include_vars: "{{ item }}" 
+    with_first_found:
+      - files:
+          - "host_vars/{{ ansible_hostname }}.yml"
+        skip: true
+
+  - name: get osd(s) if directory stat
+    stat:
+      path: "/var/lib/ceph/osd/ceph-{{ item.1.osd_id }}/journal_uuid"
+    register: osds_dir_stat
+    with_subelements:
+      - "{{ osds_journal_migration }}"
+      - partitions
+    when: osds_journal_migration is defined
+
+  - name: exit playbook osd(s) is no this host
+    fail:
+        msg: exit playbook osd {{ item.item[1].osd_id }}  is not no the host {{ ansbile_hostname }}
+    with_items: 
+        osds_dir_stat.results
+    when:
+      -  osds_dir_stat is defined and item.stat.exists == false
+
+  - name: install sgdisk(gdisk)
+    package:
+      name: gdisk
+      state: present
+    when: osds_journal_migration is defined
+
+  - name: generate uuid for osds journal
+    shell: >
+      uuidgen
+    register: osds
+    with_subelements:
+      - "{{ osds_journal_migration }}"
+      - partitions
+    when: osds_journal_migration is defined
+
+#  - name: dump osd_ids
+#    shell: >
+#      echo " {{ item.stdout }} {{ item.item[1].index }} {{ item.item[1].index }} {{ item.item[0].device_name }} " >> /root/bbq.txt
+#    with_items: 
+#      - "{{ osds.results }}"
+
+  - name: make osd partitions on ssd
+    shell: >
+      sgdisk --new={{item.item[1].index}}:0:+{{item.item[1].size}} "--change-name={{ item.item[1].index }}:ceph journal" --typecode={{ item.item[1].index }}:{{ journal_typecode }} --partition-guid={{ item.item[1].index }}:{{ item.stdout }} --mbrtogpt -- /dev/{{ item.item[0].device_name }}
+    with_items: 
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: stop osd(s) service
+    service:
+      name: "ceph-osd@{{ item.item[1].osd_id }}"
+      state: stopped
+      enabled: no
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: flush osd(s) journal
+    shell: >
+      ceph-osd -i {{ item.item[1].osd_id }} --flush-journal     
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: update osd(s) journal soft link
+    shell: >
+      ln -sf /dev/disk/by-partuuid/{{ item.stdout }} /var/lib/ceph/osd/ceph-{{ item.item[1].osd_id }}/journal
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: update osd(s) journal uuid
+    shell: >
+      echo {{ item.stdout }} > /var/lib/ceph/osd/ceph-{{ item.item[1].osd_id }}/journal_uuid
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: initialize osd(s) new journal 
+    shell: >
+      ceph-osd -i {{ item.item[1].osd_id }} --mkjournal
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined
+
+  - name: start osd(s) service
+    service:
+      name: "ceph-osd@{{ item.item[1].osd_id }}"
+      state: started
+      enabled: yes
+    with_items:
+      - "{{ osds.results }}"
+    when: osds_journal_migration is defined

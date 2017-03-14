@@ -1,0 +1,17 @@
+osds_journal_migration:
+ - device_name: sdf
+   partitions:
+   - index: 1
+     size: 5120M
+     osd_id: 0
+   - index: 2
+     size: 5120M
+     osd_id:1
+ - device_name sdg
+   partitions:
+   - index: 1
+     size: 5120M
+     osd_id: 2
+   - index: 2
+     size: 5120M
+     osd_id:3
