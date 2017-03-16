@@ -70,7 +70,10 @@ host6
 
 ```
   git clone https://github.com/ceph/ceph-ansible.git
+
+  yum install ansbile
 ```
+  
 
 ##2.1 ceph-ansible 参数配置说明
 
@@ -123,8 +126,8 @@ $vim group_vars/all.yml
 // 建议使用distro, centos7 需要在 centos_package_dependencies: 变量添加centos-release-ceph-jewel
 // 如果使用其他版本使用upstream
 // ceph_stable: true # use ceph stable branch
-// ceph_mirror: http://download.ceph.com
-// ceph_stable_key: https://download.ceph.com/keys/release.asc
+// ceph_mirror: http://mirrors.163.com/ceph/
+// ceph_stable_key: http://mirrors.163.com/ceph/
 // ceph_stable_release: jewel # ceph stable release
 // ceph_stable_repo: "{{ ceph_mirror }}/rpm-{{ ceph_stable_release }}"
 ceph_origin: 'distro' 
@@ -183,8 +186,8 @@ journal_collocation: true
 ...
 ```
 
-II. 多个osd对应多个journal
-   多个journal可以是一个磁盘的多个分区. 目前还不支持, 输入一个ssd, 自动按照journal_size 大小自动把ssd分区给多个osd作日志盘使用.
+II. 多个osd对应多个journal盘
+   多个journal可以是一个磁盘的多个分区. 目前还不支持输入一个ssd, 自动按`journal_size`大小自动把ssd分区给多个osd作日志盘使用. 
 
 ```
 $vim group_vars/osds.yml
@@ -197,6 +200,10 @@ raw_journal_devices:
   - /dev/sdf4
 ... 
 ```
+
+SSD自动分区脚本使用可以参考: 
+
+- [journal ssd 分区自动化](make-ssd-journal-partition/README.md)
 
 III. 使用目录当osd使用
 
@@ -220,4 +227,33 @@ $ansible-playbook site.yml -k
 
 ## 3.2 自定义参数
 
-     可以修改`ceph-ansible/roles/ceph-command/ceph.conf.j2`加入自己需要的参数.
+   自定义参数可以配置配置文件`group_vars/all.yml`, 可以修改变量`ceph_conf_overrides`, 支持`global`, `osd`, `mon`等覆盖.
+
+```
+$ vim group_vars/all.yml
+ceph_conf_overrides:
+  global:
+    osd_pool_default_size: 2 
+  osd:
+    osd_max_write_size = 512
+    osd_client_message_size_cap = 2147483648
+    osd_deep_scrub_stride = 131072
+    osd_op_threads = 8
+    osd_disk_threads = 4
+    osd_map_cache_size = 1024
+    osd_map_cache_bl_size = 128
+    filestore_max_sync_interval = 15
+    filestore_min_sync_interval = 10
+    filestore_queue_max_bytes = 10485760
+    filestore_queue_committing_max_ops = 5000
+    filestore_queue_committing_max_bytes = 10485760000
+    filestore_op_threads = 32
+    filestore_max_inline_xattr_size = 254
+    filestore_max_inline_xattrs = 6
+    osd_max_backfills = 2
+    osd_recovery_max_active = 2
+    osd_recovery_op_priority = 4
+```
+
+- [自动化安装ustack failtrue-domain](ustack-cluster/README.md)
+- [迁移journal磁盘到ssd](migrate-journal-ssd/README.md)
