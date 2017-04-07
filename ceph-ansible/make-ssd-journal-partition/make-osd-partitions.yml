@@ -30,8 +30,7 @@
   - "{{ osd_group_name }}"
 
   tasks:
-
-  - name: Load a variable file for devices patition
+  - name: load a variable file for devices patition
     include_vars: "{{ item }}"
     with_first_found:
       - "host_vars/{{ ansible_hostname }}.yml"

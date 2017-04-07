@@ -29,7 +29,7 @@ cluster network 192.168.21.0/24
     集群所有服务器可以正常连接外网下载rpm包,ansible自动连接外网下载ceph对应的rpm包, 以及ceph系统依赖rpm包.
 
 ####1.2.2 配置集群的ip对照表
-   ip 对照表必须填写public netwrok 段ip地址
+   ip 对照表必须填写public netwrok段ip地址
 ```
 $vim /etc/hosts
 
@@ -66,14 +66,13 @@ host4
 host5
 host6
 ```
-### 2.3 ceph-ansible 下载
+### 1.3 ceph-ansible 下载
 
 ```
   git clone https://github.com/ceph/ceph-ansible.git
 
   yum install ansbile
 ```
-  
 
 ##2.1 ceph-ansible 参数配置说明
 
@@ -158,8 +157,8 @@ osd_auto_discovery: true
 ```
 II. 用户指定osd磁盘
  
-   建议集群每台机器osd数目以及磁盘名称`/dev/sdb /deb/sdc`都一致,否则磁盘列表变量`devices:`需要在/etc/ansible/hosts每个osd机器分别传入.
-所有`devices`必须是磁盘,不能是磁盘分区
+   建议集群每台机器osd数目以及磁盘名称`/dev/sdb /deb/sdc`都一致, 否则磁盘列表变量`devices:`需要在/etc/ansible/hosts每个osd机器分别传入.
+所有`devices`必须是磁盘,不能是磁盘分区.
 ```
 $vim group_vars/osds.yml
 
@@ -219,10 +218,33 @@ osd_directories:
 
 ## 3.1 自动化安装集群
 
-   上面配置只需要在集群其中一台机器下载ceph-ansible,并且做上面相关配置, 其他机器无需要安装任何客户端. 然后执行进入ceph-ansible
+### 3.1.1 Screen 安装和配置
+
+   为了防止网络中断导致终端运行的ansible脚本中断导致集群安成功, 我们应该选用screen, 如果没有screen, 需要安装.
 
 ```
-$ansible-playbook site.yml -k
+$ yum install -y screen
+```
+
+### 3.1.2 在screen执行ansible脚本
+
+   上面配置只需要在集群其中一台机器下载ceph-ansible, 并且做上面相关配置, 其他机器无需要安装任何客户端. 然后执行进入ceph-ansible
+
+```
+$ screen -R ceph-install
+$ ansible-playbook site.yml -k
+```
+
+   退出screen, 脚本将在后台执行, 方法如下:
+
+```
+  按组合键CRTL+A之后再按组合键CRTL+D
+```
+
+  重新进入screen, 可以查看后台运行的任务
+
+```
+  $ screen -R ceph-install
 ```
 
 ## 3.2 自定义参数
