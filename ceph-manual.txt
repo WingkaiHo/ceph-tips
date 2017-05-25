@@ -1,0 +1,758 @@
+1. 安装dell服务器，
+
+   raid卡需要采用直通模式(non-raid); 各磁盘独立运行。
+
+   网络依赖硬件不同，使用万兆网卡或者两个千兆网卡做bonding6。
+
+2. 配置host map(192.168.*.*为存储网络)
+2.1
+在/etc/hosts中增加:(hostname对应的IP必须是public network，也就是虚拟机访问存储的IP)
+192.168.200.11 host11
+192.168.200.12 host12
+192.168.200.13 host13
+192.168.200.14 host14
+
+注意：如果虚拟机的host，也要在host文件加上述映射,保证正常访问ceph集群节点!!!!
+
+
+2.2 用systemctl工具关闭防火墙,关闭selinux
+# systemctl disable firewalld.service
+# systemctl stop firewalld.service
+# setenforce 0
+
+2.3 配置ntp
+挑选其中一台作为ntpserver，修改/etc/ntp.conf
+将restrict default kod nomodify notrap nopeer noquery
+restrict -6 default kod nomodify notrap nopeer noquery
+改为
+restrict default nomodify
+restrict -6 default nomodify
+增加：
+server 127.127.1.0
+fudge 127.127.1.0 stratum 10
+
+作为ntp client的机器,在/etc/ntp.conf中增加：
+server 192.168.200.12
+注释下面服务器地址:
+#server 0.centos.pool.ntp.org iburst
+#server 1.centos.pool.ntp.org iburst
+#server 2.centos.pool.ntp.org iburst
+#server 3.centos.pool.ntp.org iburst
+
+所有机器启动ntpd服务：
+# /etc/init.d/ntpd start
+# chkconfig ntpd on
+禁止chrony
+# systemctl disable chrony
+# systemctl stop chrony
+
+3.配置本地的ceph和centos7安装源
+
+4.安装ceph-deploy
+在host14上操作:
+4.1
+[root@store14 ~]# mkdir ceph-deploy
+[root@store14 ~]# cd ceph-deploy
+[root@store14 ceph-deploy]# yum install ceph-deploy
+
+4.2 在各节点机器安装ceph
+# yum install ceph rbd-fuse ceph-release python-ceph-compat ceph-debuginfo python-rbd librbd1-devel ceph-radosgw -y
+
+4.3 使用ceph-deploy创建集群 
+4.3.1
+[root@store14 ceph-deploy]# ceph-deploy new host11 host12 host13
+[root@store14 ceph-deploy]# ls
+ceph.conf  ceph.log  ceph.mon.keyring
+
+4.3.2
+修改ceph.conf文件
+在global中加入：
+osd_pool_default_size = 2  # 设定文件的备份数，普通一般是2或者3，如果使用磁盘阵列，可以在此设定为1
+public network = 192.168.200.0/16 # 公共网络
+cluster network = 192.168.201.0/16 ＃存储网络
+mon_clock_drift_allowed = 0.5 
+公共网络是虚拟机访问ceph集群的网段，也是hostname对应的IP所在的段。 存储网络以来硬件条件不同，决定是否使用，
+如果虚拟机访问和ceph本身流量都走同一网卡，存储网络就不用设置。
+
+加入以下osd配置
+[osd]
+osd mkfs type = xfs
+osd mount options xfs = rw,noatime,nodiratime,nobarrier,inode64,logbsize=256k,delaylog
+osd mkfs options xfs = -f -i size=2048
+osd max write size = 512
+osd client message size cap = 2147483648
+osd deep scrub stride = 131072
+osd op threads = 8
+osd disk threads = 4
+osd map cache size = 1024
+osd map cache bl size = 128
+filestore max sync interval = 15
+filestore min sync interval = 10
+filestore queue max bytes = 10485760
+filestore queue committing max ops = 5000
+filestore queue committing max bytes = 10485760000
+filestore op threads = 32
+filestore max inline xattr size = 254
+filestore max inline xattrs = 6
+osd_max_backfills = 2
+osd_recovery_max_active = 2
+osd_recovery_op_priority = 4
+
+加入一下客户算配置
+[client]
+rbd cache = true
+rbd cache size = 268435456
+rbd cache max dirty = 134217728
+rbd cache max dirty age = 5
+
+
+4.3.3 创建monitor集群，获取keys
+[root@store14 ceph-deploy]# ceph-deploy mon create-initial host11 host12 host13
+
+4.4 加入osd
+prepare:
+ceph-deploy osd prepare host11:/dev/sdb
+ceph-deploy osd prepare host12:/dev/sdb
+ceph-deploy osd prepare host13:/dev/sdb
+ceph-deploy osd prepare host14:/dev/sdb
+
+ceph-deploy osd prepare host11:/dev/sdc
+ceph-deploy osd prepare host12:/dev/sdc
+ceph-deploy osd prepare host13:/dev/sdc
+ceph-deploy osd prepare host14:/dev/sdc
+
+ceph-deploy osd prepare host11:/dev/sdd
+ceph-deploy osd prepare host12:/dev/sdd
+ceph-deploy osd prepare host13:/dev/sdd
+ceph-deploy osd prepare host14:/dev/sdd
+
+if you use ssd:
+create a journal partition on ssd, example sdh1
+# ceph-deploy osd prepare host1:/dev/sda1:/dev/sdh1
+# ceph-deploy osd activate host1:/dev/sda1
+
+activate:
+ceph-deploy osd activate host11:/dev/sdb1
+ceph-deploy osd activate host12:/dev/sdb1
+ceph-deploy osd activate host13:/dev/sdb1
+ceph-deploy osd activate host14:/dev/sdb1
+
+ceph-deploy osd activate host11:/dev/sdc1
+ceph-deploy osd activate host12:/dev/sdc1
+ceph-deploy osd activate host13:/dev/sdc1
+ceph-deploy osd activate host14:/dev/sdc1
+
+ceph-deploy osd activate host11:/dev/sdd1
+ceph-deploy osd activate host12:/dev/sdd1
+ceph-deploy osd activate host13:/dev/sdd1
+ceph-deploy osd activate host14:/dev/sdd1
+
+4.5添加管理keyring
+# ceph-deploy admin host11 host12 host13
+如果已有keyring文件，加上--overwrite-conf选项
+# ceph-deploy --overwrite-conf admin host11 host12 host13
+
+！！！在所有使用ceph的机器上推送admin key，并安装ceph包.
+
+
+4.6 创建pool
+4.6.1 存储池osd pg num 选择
+   Ceph 建议集群里每个OSD(磁盘)，处理大约50～100个PG比较合适。这个PG规模既可以达到数据均匀分布，也可以保证数据安全性。
+   Ceph集群要求每个OSD 处理PG数在20～300个之间。PG数目选择计算公式如下：
+
+   PG =(OSD数目 * 每个OSD处理PG数目) /备份数
+
+   50个osd以内的每个OSD处理PG数目建议设50个计算， 50个以上个osd以内的每个OSD处理PG数目建议设为100个来计算
+
+4.6.1.1 单个存储池的集群PG数配置
+在在单个存储池， 12个OSD，备份数目为3的集群，每个OSD处理50个PG， 按照公式PG数目如下:
+(12* 50) /3 = 200 (最近的2的N次方向上取整是256) .
+
+每个osd处理的pg数目:
+256 * 3 / 12  ＝ 64  每个OSD 处理64个PG，在50～100个范围内。
+
+存储池pg_num, pgs_num配置256
+
+4.6.1.2 多个存储池集群配置
+   例如一个集群有4个存储池, 12个OSD, 所有存储池备份数为2集群，预计每个OSD处理100个PG左右。
+   PG 总数 ＝ (12 * 50) /2 = 300 向上取最接近的2的N次方是512 
+   这个配置系统每个OSD 处理PG数是 : （512 * 2） /12 = ~ 85
+   由于有四个存储池， PG总数平均分配给四个存储池，每个存储池pg_num, pgs_num配置128。
+
+4.6.2 当前集群12个osd，根据上面计算rbd pg_num pgp_num配置为256
+# ceph osd pool create rbd 256 256
+
+4.7 创建对网关,允许swift:
+创建对象网关需要的pool
+# ceph osd pool create .rgw 16 16 
+# ceph osd pool create .rgw.control 16 16 
+# ceph osd pool create .rgw.gc 16 16 
+# ceph osd pool create .rgw.root 16 16 
+# ceph osd pool create .rgw.buckets 16 16 
+# ceph osd pool create .rgw.buckets.index 16 16
+# ceph osd pool create .log 16 16  
+# ceph osd pool create .intent-log 16 16
+# ceph osd pool create .usage 16 16 
+# ceph osd pool create .users 16 16 
+# ceph osd pool create .users.email 16 16 
+# ceph osd pool create .users.swift 16 16 
+# ceph osd pool create .users.uid 16 16 
+
+把host11配置为对象网关
+# ceph-deploy --overwrite-conf  rgw create host11
+
+添加对象网关用户:
+# radosgw-admin user create --uid=cloudstack --display-name="cloudstack" --email=sanguosifang@163.com
+
+添加对象网关子子用户:
+# radosgw-admin subuser create --uid=cloudstack --subuser=cloudstack:swift --access=full
+
+允许子接口接收swift访问:
+# radosgw-admin key create --subuser=cloudstack:swift --key-type=swift --gen-secret
+此命令返回:
+
+.....
+"swift_keys": [
+        {
+            "user": "cloudstack:swift",
+            "secret_key": "uKKj7uZHOEnlCBVhXZ6xIpdMRcfD8XpfiAJRRtxv"
+        }
+    ],
+......
+
+把secret_key记录下来，以后cloudstack可以通过这个key访问对象网关.
+
+测试可以通过cloudstack swift工具进行测试
+1) 可以通过swift-client查询: 
+   /usr/share/cloudstack-common/scripts/storage/secondary/swift -A http://192.168.200.11:7480/auth -U cloudstack:swift -K uKKj7uZHOEnlCBVhXZ6xIpdMRcfD8XpfiAJRRtxv  list
+
+2）测试对象网关是否可以使用可以通过下面命令上传文件到ceph swift对象网关: 
+   /usr/share/cloudstack-common/scripts/storage/secondary/swift -A http://172.16.200.11:7480/auth -U cloudstack:swift -K uKKj7uZHOEnlCBVhXZ6xIpdMRcfD8XpfiAJRRtxv  upload local-filename remote-filename 
+
+3）上传以后可以同光list命令进行查询
+
+4）删除上传的文件  
+   /usr/share/cloudstack-common/scripts/storage/secondary/swift -A http://172.16.200.11:7480/auth -U cloudstack:swift -K uKKj7uZHOEnlCBVhXZ6xIpdMRcfD8XpfiAJRRtxv  delete remote-filename
+
+4.8 在cloudstack上配置ceph 一级存储
+
+1) 点击进入界面Home->Infrastructure->Primary Storage
+
+2) 点击"Add Primary storage"
+
+	Scope: Zone-Wide		#建议选择Zone-Wide否则某些功能无法实现
+	Hypervisor:	KVM			
+	Zone:					#根据实际情况选择
+	Name: rbd				
+	Protocol:RBD			#不能修改
+	Provider:DefaultPrimary	
+	RADOS Monitor:			#填写ceph monitor ip地址
+	RADOS Pool:	rbd			
+	RADOS User:	admin		#不能修改
+	RADOS Secret:			#在ceph monitor机器etc/ceph/ceph.client.admin.keyring 文件上获取
+	Storage Tags:	ceph	#可以根据实际情况修改
+
+	例如
+	cat /etc/ceph/ceph.client.admin.keyring
+
+	[client.admin]
+	key = AQDWHJ5VPCqWNxAAwDj+zR3g0C1qlFHtZnFSnQ==
+
+	RADOS Secret里面输入AQDWHJ5VPCqWNxAAwDj+zR3g0C1qlFHtZnFSnQ==
+
+	点击OK添加.
+
+	如果不成功检查cloudstack manager 和各个agent机器是否已经安装rbd 包。
+
+
+4.9 在cloudstack上配置swift对象网关
+
+1) 添加 Secondary Staging Store
+	
+	I.进入页面: Home->Infrastructure->Secondary Storage
+
+	II. 点击 Select view 选择Secondary Staging Store 
+	 
+    III. 点击Add NFS Secondary Staging Store
+
+	Zone ""		#选择对应的zone
+	NFS server  #输入对应NFS IP地址
+	Path ""		#输入nfs路径，最好于一级存储不同目录。
+
+    点击OK添加
+
+2) 添加 Secondary Storage 
+
+	I. 在当前页面上 点击Select view 选择Secondary Storage
+
+	II. 如果已经存在二级存储配置需要设法删除否则无法进行下一步操作.
+
+	III. 点击Add Secondary Storage
+
+	Name:     ceph-swift				#可以输入其他名字
+	Provider: Swift						#必须选择这个选项
+	URL:  http://radosgw_ip:7480/auth	#radosgw_ip根据实际情况输入
+	Account:	cloudstack				#不能修改
+	Username:	swift					#不能修改
+	Key:								#通过命令 radosgw-admin user info --uid=cloudstack 
+
+	获取swift对象网关对应secret_key必须要在部署对象网关机器上执行下面命令获取:
+
+	#radosgw-admin user info --uid=cloudstack
+	
+	"swift_keys": [
+        {
+            "user": "cloudstack:swift",
+            "secret_key": "********"
+        }
+
+	对应的secret_key从上面swift_keys对象的secret_key字段*******处获取。
+
+5 ceph集群的日常维护
+5.1. 增加osd，操作同上4.4
+
+5.2 删除osd（以osd.3为例）
+# ceph osd out 3
+# ceph health 等待ceph状态到HEALTH_OK，进行下一步操作
+# /etc/init.d/ceph stop osd.3
+# umount /var/lib/ceph/osd/ceph-3
+# ceph osd crush remove osd.3
+# ceph auth del osd.3
+# ceph osd rm osd.3
+
+5.3 增加monitor，注意monitor的数目必须是单数，以保证正确选举
+# cd ceph-deploy
+# ceph-deploy mon add hostN
+
+5.4 删除一个monitor
+# cd ceph-deploy
+# ceph-deploy mon destroy hostN
+
+修改ceph.conf中对应的mon_initial_members  mon_host两行，并推送到所有的集群机器
+# ceph-deploy --overwrite-conf admin host11 host12 host13 host14
+
+然后在每台mon机器上重启monitor服务
+＃/etc/init.d/ceph restart mon.host11
+＃/etc/init.d/ceph restart mon.host12
+＃/etc/init.d/ceph restart mon.host13
+
+5.5 在每台服务器上重启osd或者mon服务
+比如在host11上
+# /etc/init.d/ceph stop osd.0
+# /etc/init.d/ceph stop osd.0
+# /etc/init.d/ceph restart mon.host11
+
+5.6 当需要暂时停止某个osd，但是无需ceph进行自动数据迁移时，可以将osd设为noout状态
+# ceph osd set noout
+其他操作完成后，恢复
+# ceph osd unset noout
+
+如果osd故障，需要替换硬盘
+# ceph osd out 3
+# ceph health 等待ceph状态到HEALTH_OK，进行下一步操作
+# /etc/init.d/ceph stop osd.3
+# umount /var/lib/ceph/osd/ceph-3
+待硬盘换新后，重新加入集群
+
+
+5.7 查看ceph集群健康状态
+# ceph health
+# ceph health detail
+监控操作
+# ceph -w
+
+5.8 查看使用size
+# ceph df 
+# ceph df detail
+
+5.9 添加mon失败导致集群无法完成mon选举，集群不可用
+
+	1) 通过命令停止所有机器的mon进程
+		#/etc/init.d/ceph stop mon
+	
+	2) 创建monitor map文件
+		#monmaptool --fsid a7189363-3d88-4ca4-a99d-5ecc98453185 --create --add host12 192.168.200.12 --clobber monmap
+		
+		--fsid a7189363-3d88-4ca4-a99d-5ecc98453185 /etc/ceph.conf文件 
+		[global]
+			fsid =	*********************8
+
+		获取fsid，必须设置一致否则导致集群无法启动
+
+	3) 检查配置是否正确
+		monmaptool --print monmap
+
+	4） 把monmap 注入到集群
+		ceph-mon -i host12 --inject-monmap monmap
+
+	5） 重新启动所有mon进程
+		#/etc/init.d/ceph start mon
+
+5.10 手工添加monitor(以添加host13为例)
+    1) 创建目录
+	   mkdir -p /var/lib/ceph/mon/ceph-host13/
+    2）创建临时文件夹
+	   mkdir tmp
+       cd tmp/
+
+    3) 修改monitor map
+       ceph auth get mon. -o keyring
+       ceph mon getmap -o monmap
+       ceph-mon -i host13 --mkfs --monmap monmap --keyring keyring
+
+	4) 启动服务
+       cd /var/lib/ceph/mon/ceph-host13/
+       touch done
+       touch sysvinit
+       /etc/init.d/ceph start mon
+
+6 使用特定的硬盘,创建特定的磁盘pool(主要应用场景在有磁盘阵列或者iscsi server的环境下)
+  假如我们有另外的服务器，以及磁阵等，我们可以为其创建专门的osd pool，以使用其资源.
+  ceph 集群默认创建default根分区，通过ceph-deploy创建osd都存放在根分区上。
+  我们创建另外一个根分区myroot, 把特定的osdd放到这个根分区上，创建存储池时候，指定使用这个根分区.
+
+6.1 创建新的crush 根分区,名字为myroot
+# ceph osd crush add-bucket myroot root
+
+6.2 创建规则(rule)，配置这个规则从根分区myroot选择osd 
+# ceph osd crush rule create-simple rule_myroot myroot firstn
+
+6.3 查看这新规则内容/这个规则是否创建成功
+# ceph osd crush rule dump rule_myroot
+
+6.4 执行下面命令逐一把属于myroot机器的osd加入到集群里面
+# ceph-deploy osd prepare newhost:/dev/sdx
+  newhost: 代表机器名字，需要按照实际情况输入,必须在集群里面各个机器/etc/hosts有登记过的
+  x: 代表机器上的任意一个磁盘
+
+6.5 把新增加osd对应机器bucket移动到myroot 根分区上
+# ceph osd crush move newhost root=myroot
+  newhost 代表机器名字，需要按照实际情况输入， 必须在集群里面各个机器/etc/hosts有登记过的
+
+6.6 执行下面命令逐一把属于myroot osd激活
+# ceph-deploy osd activate newhost:/dev/sdx1
+
+  newhost: 代表机器名字，需要按照实际情况输入,必须在集群里面各个机器/etc/hosts有登记过的
+  x: 代表机器上的任意一个磁盘
+
+6.7 创建一个存储池，这个存储池使用myroot 分区的osd
+# ceph osd pool create rbd-myroot <pg_num> <pgp_num> rule_myroot
+  存储池pg_num pgp_num的数目,需要根据实际情况配置见4.6 节创建pool解释
+
+################################################################################
+7 本地虚拟机磁盘镜像转换rbd磁盘镜像，并且覆盖cloudstack对应虚拟机镜像文件
+1. 首先获得完全的镜像
+# qemu-img convert -f qcow2 -O raw /root/old.qcow2 /root/vm-new.img
+
+2. 获取新的虚拟机镜像进行名称:
+   进入cloudstack 选择左边Instances选项，页面显示虚拟机列表。在虚拟机列表选择对应的虚拟机;
+   点击虚拟机属性的Detail选项卡，然后点点击选择View Volumes;
+   然后鼠标点击quickview “+”位置，cloudstack显示虚拟机磁盘镜像ID;
+
+3. 停止对应的虚拟机。
+
+4. 将nbd设备导入ceph的rbd pool里面，替代虚拟机镜像（假定现在新的虚拟机镜像为vm-new.img）
+# rbd mv vm-new.img vm-new.img.bak
+# qemu-img convert -O raw /root/vm-new.img rbd:rbd/vm-new.img:rbd_default_format=2:rbd_default_features=1
+
+5. 重新启动虚拟机。
+
+数据盘也是同样的操作步骤.
+
+           old vm                            new vm
+
+                          cloudstack上传
+            base  ---------------------->     base
+
+                         convert 
+          vm1.qcow2 -------------------->   vm-new.img
+
+
+
+###################################################################################################
+###########################  ceph 监控系统   ######################################################
+
+所有需要的文件位于monitor-ceph-cluster目录 svn://172.16.2.139/sky/doc/design/monitor-ceph-cluster
+安装前准备
+
+1) 本次安装在安装源里面新增加下面rpm包
+   collectd-5.5.0-1.el7.centos.x86_64.rpm
+   libtool-ltdl-2.4.2-20.el7.x86_64.rpm
+   grafana-2.0.2-1.x86_64.rpm
+   graphite-web-0.9.12-8.el7.noarch.rpm
+   python-carbon-0.9.12-7.el7.noarch.rpm
+   python-simplejson-3.3.3-1.el7.x86_64.rpm
+   python-django-1.6.11-2.el7.noarch.rpm
+   python-django-tagging-0.3.1-11.el7.noarch.rpm
+   python-whisper-0.9.12-4.el7.noarch.rpm
+   python-django-bash-completion-1.6.11-2.el7.noarch.rpm
+
+   上面安装包可以在广州开发环境下面路径进行同步
+   172.16.200.11:/home/repo/centos71-ceph-cloudstack-repo/packages 
+
+   可以通过createrepo 重新创建安装源。
+
+一. graphite 时序安装和配置
+
+   需要在ceph集群其中一台机器就可以了.
+
+1.安装 graphite 和 MySQL后台 
+
+# yum install graphite-web mariadb-server.x86_64  MySQL-python
+
+2. 配置开机启动，启动mysql服务
+#systemctl enable mariadb.service
+#systemctl start mariadb.service
+
+3. 配置mysql默认密码(如果知道mysql密码可以省略此步骤)
+   mysql_secure_installation
+
+4. 创建 graphite数据库以及graphite数据库username and password
+
+mysql -e "CREATE DATABASE graphite;" -u root -p
+mysql -e "GRANT ALL PRIVILEGES ON graphite.* TO 'graphite'@'localhost' IDENTIFIED BY 'graphitePW01Vxzsigavms';" -u root -p
+mysql -e 'FLUSH PRIVILEGES;' -u root -p
+
+
+
+6. 配置graphite配置文件，输入数据库路径用户名
+＃vi /etc/graphite-web/local_settings.py
+
+
+DATABASES = {
+ 'default': {
+ 'NAME': 'graphite',
+ 'ENGINE': 'django.db.backends.mysql',
+ 'USER': 'graphite',
+ 'PASSWORD': 'graphitePW01Vxzsigavms',
+ }
+}
+
+7. 创建graphite库创建和初始化数据表 
+/usr/lib/python2.7/site-packages/graphite/manage.py syncdb
+Would you like to create one now? (yes/no): yes
+Username (leave blank to use 'root'): root
+Email address: sanguosifang@163.com
+Password: 
+Password (again): 
+
+6. 安装Carbon和Whisper (用于收集和存放collectd发送过来系统状态)
+yum install python-carbon python-whisper
+
+#systemctl enable carbon-cache.service
+#systemctl start  carbon-cache.service
+
+
+7. 修改配置文件/etc/httpd/conf.d/graphite-web.conf， 解决[Thu Jul 30
+01:59:44.056823 2015] [authz_core:error] [pid 5708] [client
+192.168.20.154:54279] AH01630: client denied by server configuration:
+/usr/share/graphite/graphite-web.wsgi 网页无法访问错误
+
+# Graphite Web Basic mod_wsgi vhost
+listen graphite_web_port
+<VirtualHost *:graphite_web_port>
+    ServerName: you_server_ip  
+    DocumentRoot "/usr/share/graphite/webapp"
+    ErrorLog /var/log/httpd/graphite-web-error.log
+    CustomLog /var/log/httpd/graphite-web-access.log common
+
+    # Header set Access-Control-Allow-Origin "*"
+    # Header set Access-Control-Allow-Methods "GET, OPTIONS"
+    # Header set Access-Control-Allow-Headers "origin, authorization, accept"
+    # Header set Access-Control-Allow-Credentials true
+   
+    WSGIScriptAlias / /usr/share/graphite/graphite-web.wsgi
+    WSGIImportScript /usr/share/graphite/graphite-web.wsgi
+	process-group=%{GLOBAL} application-group=%{GLOBAL}
+
+    <Location "/content/">
+        SetHandler None
+    </Location>
+
+    Alias /media/ "/usr/lib/python2.7/site-packages/django/contrib/admin/media/"
+    <Location "/media/">
+        #SetHandler None
+        Order deny,allow
+        Allow from all
+    </Location>
+
+   <Directory "/usr/share/graphite/">
+        Options All
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    <Directory "/etc/graphite-web/">
+        Options All
+        AllowOverride All
+  </Directory>
+
+   <Directory "/usr/share/graphite/webapp">
+        Order deny,allow
+        Allow from all
+    </Directory>
+</VirtualHost>
+
+ 或者拷贝原来配置文件:
+ cp graphite-web-rpm/graphite-web.conf /etc/httpd/conf.d/
+
+ mkdir /usr/lib/python2.7/site-packages/django/contrib/admin/media/
+
+ 修改目录和文件属性
+ chown apache:apache /usr/share/graphite/graphite-web.wsgi
+ chmod +x /usr/share/graphite/graphite-web.wsgi
+ chown -R apache:apache /etc/graphite-web/
+ chown -R apache:apache  /usr/share/graphite/
+
+7. 重新启动httpd
+   #systemctl start httpd
+
+   如果http不是默认开机启动,配置为开机启动
+   #systemctl enable httpd.service
+
+8. graphite 数据存放目录是 /var/lib/carbon/whisper/
+   可以通过此目录清理数据无用数据
+
+9.配置collectd在graphite数据存储精度
+
+配置文件/etc/carbon/storage-schemas.conf
+[collectd]
+pattern = ^collectd\.
+retentions = 10s:1d,1m:7d,10m:1y
+
+10.测试graphite是否可以使用可以通过firefox/chrome 浏览器打开.
+
+   http://graphite_web_ip:port
+
+   port: 在/etc/httpd/conf.d/graphite-web.conf 里面配置端口号.
+
+二. collectd 配置
+ 
+   collectd是收集系统所有机器系统运行信息，需要在每台机器都安装.
+
+   #yum install collectd
+
+1. 修改/ect/collectd.conf 文件可以参考 collectd/collectd.conf
+
+   vim /ect/collectd.conf
+   1) 关闭插件
+   #LoadPlugin cpu
+   
+   2) 打开插件
+   LoadPlugin exec
+   LoadPlugin write_graphite
+   LoadPlugin syslog
+   
+
+   3) 配置插件
+
+   # syslog插件配置只打印等级为err
+   <Plugin syslog>
+        LogLevel err
+   </Plugin>
+
+   #exec插件启动calamari-go二进制文件收集ceph集群信息
+
+   <Plugin exec>                                          
+       Exec "root" "/usr/lib64/collectd/calamari-go"             
+   </Plugin>             
+
+   #配置graphite时序数据库插件往数据库写入时序集群和机器状态时序信息
+
+   <Plugin write_graphite>
+    <Node "graphing">
+        Host "ip address of graphite_web and carbon install machine"
+        Port "2003"
+        Protocol "tcp"
+        LogSendErrors true 
+        Prefix "collectd."
+        Postfix ""
+        StoreRates true 
+        AlwaysAppendDS false
+        EscapeCharacter "_"
+    </Node>
+  </Plugin>
+
+  #配置网络接口插件收集网络接口信息 storagebr0是ceph集群网络接口, cloudbr0虚拟机网络接口
+  <Plugin interface>                                             
+        Interface "cloudbr0"  
+        Interface "storagebr0"
+        IgnoreSelected false
+  </Plugin> 
+
+  可以先配置一台机器，安装完collectd后发送每台机器.
+
+2. 拷贝二进制监控插件 calamari-go到目录 /usr/lib64/collectd/
+
+3. 配置collectd开机自动启动服务
+   #systemctl enable collectd.service
+
+4. 启动collectd服务
+   #systemctl start collectd.service
+
+三. 安装grafana 用户监控界面
+
+1. 安装grafana v2.0.2-1
+   #yum install grafana
+
+2. 配置grafana访问端口:
+
+   打开文件 /etc/grafana/grafana.ini
+
+   修改:
+   http_port=xxxx
+
+   根据实际情况配置端口
+
+3. 配置grafana web开机自动启动服务
+   #systemctl enable grafana-server.service
+
+4.启动grafana web
+   #systemctl start collectd.service
+   #service grafana-server start
+
+6.配置数据源
+  1) 使用firefox/chrome 打开grafana 页面配置数据源
+     http://grafana_web_ip:http_port
+
+  2) 初始用户名:admin 密码:admin
+
+  3) 点击左上角列表:Data sources
+
+  4) 选择Add New
+
+  5）配置 参考图grafana/SettingDataSource.png
+     Data Source：
+     Name： ceph-mon    Default： true
+     Type： Graphite
+
+     Http settings：
+     Url：http://graphite_ip_addr:port #port可以通过/etc/httpd/conf.d/graphite-web.conf获取
+     Acces：proxy
+
+     
+5.加载监控页面
+
+1) Dashboard 下拉菜单,选择import,参考图: grafana/ImportDashboards.png
+
+2）然后选择ChooseDashboardFile.png
+
+3) 选择ceph-monitor/grafana/json_page/
+   Ceph_Cluster_Home
+   Ceph_OSD_Information
+   Ceph_Performance
+   Ceph_Pool_Information
+   Host_Disk
+   Host_Load_CPU
+   Host_Network
+
+6.添加普通
+1) 点击Grafana图标
+
+2）在左边配置栏选择Grafana admin 参考图: grafana/GrafanaAdmin.png
+
+3）左边配置栏刷新以后，点击GlobalUsers: 参考图: grafana/GlobalUsers.png
+
+4）点击最上面的Create users 
+
+5) 按照要求输入信息。
