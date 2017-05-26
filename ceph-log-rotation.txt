@@ -1,0 +1,30 @@
+加速ceph 日志回滚
+
+修改ceph 日志回滚配置文件:
+/etc/logrotate.d/ceph
+
+1) 例如回滚配置文件原来
+....
+rotate 7
+weekly
+compress
+sharedscripts
+.....
+
+2) 添加回滚size配置
+.....
+rotate 7
+weekly
+size 500M
+compress
+sharedscripts
+.....
+
+3) 配置系统计划任务
+crontab -e
+
+4) 加入下面语句(每个半点执行log 回滚命令)
+30 * * * * /usr/sbin/logrotate /etc/logrotate.d/ceph >/dev/null 2>&1
+
+
+5）保存退出就可以了.
